@@ -7,6 +7,10 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Circle;
+import com.badlogic.gdx.math.Intersector;
+import com.badlogic.gdx.math.Rectangle;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -18,6 +22,8 @@ public class Jogo extends ApplicationAdapter {
 	private Texture fundo;
 	private Texture canobaixo;
 	private Texture canotopo;
+	private Texture gameOver;
+
 	private int movimentox = 50;
 	private int posicaoInicialVerticalPassaro;
 	private float gravidade = 3;
@@ -32,8 +38,17 @@ public class Jogo extends ApplicationAdapter {
 	private Random random;
 	private int pontos;
 	private boolean passouCano;
+	private int estadoJogo = 0;
 
 	private BitmapFont textoPontuacao;
+
+    private ShapeRenderer shapeRenderer;
+	private Circle circuloPassaro;
+	private Rectangle retanguloCanoCima;
+	private Rectangle retanguloCanoBaixo;
+
+	BitmapFont textoReiniciar;
+	BitmapFont textoMelhorPontuacao;
 
 	@Override
 	public void create () {
@@ -49,6 +64,7 @@ public class Jogo extends ApplicationAdapter {
 
 		verificaEstadoJogo();
 		desenharTexturas();
+		detectarColisoes();
 		validarPontos();
 
 	}
@@ -61,27 +77,37 @@ public class Jogo extends ApplicationAdapter {
 
 	private void verificaEstadoJogo(){
 
-
-		//aplicando evento de click
-		if(Gdx.input.justTouched()){
-			posicaoInicialVerticalPassaro = posicaoInicialVerticalPassaro + 150;
-		}else if(posicaoInicialVerticalPassaro > 0){
-			posicaoInicialVerticalPassaro = posicaoInicialVerticalPassaro - (int) gravidade;
-		}
-
 		variacao += Gdx.graphics.getDeltaTime() * 10;
 		if(variacao >= 3){
 			variacao = 0.0f;
 		}
 
+		if(estadoJogo == 0){
+			if(Gdx.input.justTouched()){
+				estadoJogo = 1;
+			}
+			return;
+		}else if(estadoJogo == 1){
 
-		posicaoCanoHorizontal-= 5;
+				//aplicando evento de click
+				if(Gdx.input.justTouched()){
+					posicaoInicialVerticalPassaro = posicaoInicialVerticalPassaro + 150;
+				}else if(posicaoInicialVerticalPassaro > 0){
+					posicaoInicialVerticalPassaro = posicaoInicialVerticalPassaro - (int) gravidade;
+				}
 
-		if(posicaoCanoHorizontal < -canobaixo.getWidth()){
-			posicaoCanoHorizontal = larguraDispositivo;
-			posicaoCanoVertical = random.nextInt(800) - 400;
-			passouCano = false;
+				posicaoCanoHorizontal-= 5;
+
+				if(posicaoCanoHorizontal < -canobaixo.getWidth()){
+					posicaoCanoHorizontal = larguraDispositivo;
+					posicaoCanoVertical = random.nextInt(800) - 400;
+					passouCano = false;
+				}
+
+		}else if(estadoJogo == 2){
+
 		}
+
 
 
 	}
@@ -95,6 +121,13 @@ public class Jogo extends ApplicationAdapter {
 		batch.draw(canobaixo,posicaoCanoHorizontal ,-espacoEntreCanos/2 + posicaoCanoVertical);
 		batch.draw(canotopo,posicaoCanoHorizontal,alturaDispositivo/2 + espacoEntreCanos/2 + posicaoCanoVertical);
 		textoPontuacao.draw(batch,String.valueOf(pontos),larguraDispositivo/2,alturaDispositivo - 100);
+
+		if(estadoJogo == 2){
+			batch.draw(gameOver, larguraDispositivo/2 - (gameOver.getWidth()/2), alturaDispositivo/2);
+			textoReiniciar.draw(batch,"Toque para reiniciar!", larguraDispositivo/2 - 140,alturaDispositivo/2 - gameOver.getHeight()/2);
+			textoMelhorPontuacao.draw(batch,"Seu recorde é: 0 pontos", larguraDispositivo/2 - 140,alturaDispositivo/2  - gameOver.getHeight());
+		}
+
 		batch.end();
 
 	}
@@ -109,6 +142,12 @@ public class Jogo extends ApplicationAdapter {
 		fundo  =  new Texture("fundo.png");
 		canobaixo  =  new Texture("cano_baixo_maior.png");
 		canotopo  =  new Texture("cano_topo_maior.png");
+		circuloPassaro =  new Circle();
+		retanguloCanoBaixo = new Rectangle();
+		retanguloCanoCima = new Rectangle();
+		shapeRenderer = new ShapeRenderer();
+
+		gameOver =  new Texture("game_over.png");
 
 	}
 
@@ -125,7 +164,19 @@ public class Jogo extends ApplicationAdapter {
 		textoPontuacao =  new BitmapFont();
 		textoPontuacao.setColor(Color.WHITE);
 		textoPontuacao.getData().setScale(10);
+
+		textoReiniciar =  new BitmapFont();
+		textoReiniciar.setColor(Color.GREEN);
+		textoReiniciar.getData().setScale(2);
+
+		textoMelhorPontuacao =  new BitmapFont();
+		textoMelhorPontuacao.setColor(Color.RED);
+		textoMelhorPontuacao.getData().setScale(2);
+
+
 		pontos = 0;
+
+
 	}
 
 	private void validarPontos(){
@@ -136,6 +187,29 @@ public class Jogo extends ApplicationAdapter {
 				passouCano = true;
 			}
 		}
+
+	}
+
+	public void detectarColisoes(){
+
+		circuloPassaro.set(50 + passaros[0].getWidth()/2, posicaoInicialVerticalPassaro + passaros[0].getHeight()/2, passaros[0].getWidth()/2);
+		retanguloCanoCima.set(posicaoCanoHorizontal,alturaDispositivo/2 + espacoEntreCanos/2 + posicaoCanoVertical,canotopo.getWidth(),canotopo.getHeight());
+		retanguloCanoBaixo.set(posicaoCanoHorizontal ,-espacoEntreCanos/2 + posicaoCanoVertical,canobaixo.getWidth(),canobaixo.getHeight());
+
+
+		if(Intersector.overlaps(circuloPassaro,retanguloCanoCima) || Intersector.overlaps(circuloPassaro,retanguloCanoBaixo)){
+			Gdx.app.log("Log", "Colidiu cano");
+			estadoJogo = 2;
+		}
+
+		//codigo importante para visualizar as formas
+		/*shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+		shapeRenderer.circle(50 + passaros[0].getWidth()/2, posicaoInicialVerticalPassaro + passaros[0].getHeight()/2, passaros[0].getWidth()/2);
+		shapeRenderer.rect(posicaoCanoHorizontal,alturaDispositivo/2 + espacoEntreCanos/2 + posicaoCanoVertical,canotopo.getWidth(),canotopo.getHeight());
+		shapeRenderer.rect(posicaoCanoHorizontal ,-espacoEntreCanos/2 + posicaoCanoVertical,canobaixo.getWidth(),canobaixo.getHeight());
+		shapeRenderer.end();
+		*/
+
 
 	}
 }
