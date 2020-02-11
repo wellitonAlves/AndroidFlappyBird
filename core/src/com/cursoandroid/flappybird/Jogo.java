@@ -2,8 +2,11 @@ package com.cursoandroid.flappybird;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Preferences;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -11,6 +14,8 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.utils.viewport.StretchViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -35,8 +40,10 @@ public class Jogo extends ApplicationAdapter {
 	private float posicaoCanoHorizontal;
 	private float posicaoCanoVertical;
 	private float espacoEntreCanos;
+	private float posicaoHorizontalPassaro;
 	private Random random;
 	private int pontos;
+	private int pontosMaximo;
 	private boolean passouCano;
 	private int estadoJogo = 0;
 
@@ -50,6 +57,18 @@ public class Jogo extends ApplicationAdapter {
 	BitmapFont textoReiniciar;
 	BitmapFont textoMelhorPontuacao;
 
+	Sound somVoando;
+	Sound somColisao;
+	Sound somPontuacao;
+
+	Preferences preferencias;
+
+	private OrthographicCamera camera;
+	private Viewport viewport;
+	private final float VIRTUAL_WIDTH = 720;
+	private final float VIRTUAL_HEIGHT = 1280;
+
+
 	@Override
 	public void create () {
 
@@ -61,6 +80,9 @@ public class Jogo extends ApplicationAdapter {
 
 	@Override
 	public void render () {
+
+		//LIMPAR FRAMES
+		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
 		verificaEstadoJogo();
 		desenharTexturas();
@@ -85,12 +107,17 @@ public class Jogo extends ApplicationAdapter {
 		if(estadoJogo == 0){
 			if(Gdx.input.justTouched()){
 				estadoJogo = 1;
+				somVoando.play();
+				posicaoCanoVertical = 0;
 			}
 			return;
 		}else if(estadoJogo == 1){
 
+
+
 				//aplicando evento de click
 				if(Gdx.input.justTouched()){
+					somVoando.play();
 					posicaoInicialVerticalPassaro = posicaoInicialVerticalPassaro + 150;
 				}else if(posicaoInicialVerticalPassaro > 0){
 					posicaoInicialVerticalPassaro = posicaoInicialVerticalPassaro - (int) gravidade;
@@ -98,13 +125,32 @@ public class Jogo extends ApplicationAdapter {
 
 				posicaoCanoHorizontal-= 5;
 
+
 				if(posicaoCanoHorizontal < -canobaixo.getWidth()){
 					posicaoCanoHorizontal = larguraDispositivo;
 					posicaoCanoVertical = random.nextInt(800) - 400;
 					passouCano = false;
 				}
 
+
 		}else if(estadoJogo == 2){
+
+			if(pontos > pontosMaximo){
+				pontosMaximo = pontos;
+				preferencias.putInteger("pontuacaoMaxima",pontosMaximo);
+			}
+
+			posicaoHorizontalPassaro -= Gdx.graphics.getDeltaTime()*500;
+
+			if(Gdx.input.justTouched()){
+				estadoJogo = 0;
+				pontos = 0;
+				posicaoHorizontalPassaro = 0;
+			//	gravidade = 0;
+				posicaoInicialVerticalPassaro = (int) alturaDispositivo / 2;
+				posicaoCanoHorizontal = larguraDispositivo;
+				posicaoCanoVertical = alturaDispositivo/2;
+			}
 
 		}
 
@@ -115,17 +161,19 @@ public class Jogo extends ApplicationAdapter {
 
 	private void desenharTexturas(){
 
+		batch.setProjectionMatrix(camera.combined);
+
 		batch.begin();
 		batch.draw(fundo, 0, 0,larguraDispositivo, alturaDispositivo);
-		batch.draw(passaros[(int)variacao], movimentox, posicaoInicialVerticalPassaro);
-		batch.draw(canobaixo,posicaoCanoHorizontal ,-espacoEntreCanos/2 + posicaoCanoVertical);
-		batch.draw(canotopo,posicaoCanoHorizontal,alturaDispositivo/2 + espacoEntreCanos/2 + posicaoCanoVertical);
+		batch.draw(passaros[(int)variacao], movimentox + posicaoHorizontalPassaro, posicaoInicialVerticalPassaro);
+		batch.draw(canobaixo,posicaoCanoHorizontal ,-espacoEntreCanos + posicaoCanoVertical);
+		batch.draw(canotopo,posicaoCanoHorizontal,alturaDispositivo/2 + espacoEntreCanos + posicaoCanoVertical);
 		textoPontuacao.draw(batch,String.valueOf(pontos),larguraDispositivo/2,alturaDispositivo - 100);
 
 		if(estadoJogo == 2){
 			batch.draw(gameOver, larguraDispositivo/2 - (gameOver.getWidth()/2), alturaDispositivo/2);
 			textoReiniciar.draw(batch,"Toque para reiniciar!", larguraDispositivo/2 - 140,alturaDispositivo/2 - gameOver.getHeight()/2);
-			textoMelhorPontuacao.draw(batch,"Seu recorde é: 0 pontos", larguraDispositivo/2 - 140,alturaDispositivo/2  - gameOver.getHeight());
+			textoMelhorPontuacao.draw(batch,"Seu recorde é: "+ pontosMaximo +" pontos", larguraDispositivo/2 - 140,alturaDispositivo/2  - gameOver.getHeight());
 		}
 
 		batch.end();
@@ -153,8 +201,8 @@ public class Jogo extends ApplicationAdapter {
 
 	private void iniciarObjetos(){
 
-		larguraDispositivo = Gdx.graphics.getWidth();
-		alturaDispositivo = Gdx.graphics.getHeight();
+		larguraDispositivo = VIRTUAL_WIDTH;
+		alturaDispositivo = VIRTUAL_HEIGHT;
 		posicaoInicialVerticalPassaro = (int) alturaDispositivo / 2;
 		posicaoCanoHorizontal = larguraDispositivo;
 		posicaoCanoVertical = alturaDispositivo;
@@ -173,10 +221,26 @@ public class Jogo extends ApplicationAdapter {
 		textoMelhorPontuacao.setColor(Color.RED);
 		textoMelhorPontuacao.getData().setScale(2);
 
+		somVoando = Gdx.audio.newSound(Gdx.files.internal("som_asa.wav"));
+		somColisao = Gdx.audio.newSound(Gdx.files.internal("som_batida.wav"));
+		somPontuacao = Gdx.audio.newSound(Gdx.files.internal("som_pontos.wav"));
+
+		preferencias = Gdx.app.getPreferences("flappyBird");
+		pontosMaximo = preferencias.getInteger("pontuacaoMaxima", 0);
+
+
+			camera = new OrthographicCamera();
+			camera.position.set(VIRTUAL_WIDTH/2,VIRTUAL_HEIGHT/2,0);
+			viewport = new StretchViewport(VIRTUAL_WIDTH,VIRTUAL_HEIGHT,camera);
 
 		pontos = 0;
 
 
+	}
+
+	@Override
+	public void resize(int width, int height) {
+		viewport.update(width, height);
 	}
 
 	private void validarPontos(){
@@ -185,6 +249,7 @@ public class Jogo extends ApplicationAdapter {
 			if(!passouCano){
 				pontos++;
 				passouCano = true;
+				somPontuacao.play();
 			}
 		}
 
@@ -192,14 +257,17 @@ public class Jogo extends ApplicationAdapter {
 
 	public void detectarColisoes(){
 
-		circuloPassaro.set(50 + passaros[0].getWidth()/2, posicaoInicialVerticalPassaro + passaros[0].getHeight()/2, passaros[0].getWidth()/2);
-		retanguloCanoCima.set(posicaoCanoHorizontal,alturaDispositivo/2 + espacoEntreCanos/2 + posicaoCanoVertical,canotopo.getWidth(),canotopo.getHeight());
-		retanguloCanoBaixo.set(posicaoCanoHorizontal ,-espacoEntreCanos/2 + posicaoCanoVertical,canobaixo.getWidth(),canobaixo.getHeight());
+		circuloPassaro.set(movimentox + posicaoHorizontalPassaro + posicaoHorizontalPassaro + passaros[0].getWidth()/2, posicaoInicialVerticalPassaro + passaros[0].getHeight()/2, passaros[0].getWidth()/2);
+		retanguloCanoCima.set(posicaoCanoHorizontal,alturaDispositivo/2 + espacoEntreCanos + posicaoCanoVertical,canotopo.getWidth(),canotopo.getHeight());
+		retanguloCanoBaixo.set(posicaoCanoHorizontal ,-espacoEntreCanos + posicaoCanoVertical,canobaixo.getWidth(),canobaixo.getHeight());
 
 
 		if(Intersector.overlaps(circuloPassaro,retanguloCanoCima) || Intersector.overlaps(circuloPassaro,retanguloCanoBaixo)){
 			Gdx.app.log("Log", "Colidiu cano");
-			estadoJogo = 2;
+			if(estadoJogo == 1) {
+				estadoJogo = 2;
+				somColisao.play();
+			}
 		}
 
 		//codigo importante para visualizar as formas
